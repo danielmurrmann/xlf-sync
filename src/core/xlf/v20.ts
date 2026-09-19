@@ -1,13 +1,21 @@
 import type { MessageEntry, ParsedXlf } from "../../types/model.js";
+import {
+	orderedChildElements,
+	orderedElementChildren,
+	orderedNodesToInnerXml,
+} from "./inline-xml.js";
 
 function asArray<T>(v: T | T[] | undefined | null): T[] {
 	if (!v) return [];
 	return Array.isArray(v) ? v : [v];
 }
 
-export function parseV20(doc: unknown): ParsedXlf {
+export function parseV20(doc: unknown, orderedDoc?: unknown): ParsedXlf {
 	const entries = new Map<string, MessageEntry>();
 	const duplicates: string[] = [];
+	const inlineSegmentsByUnit = orderedDoc
+		? collectInlineSegmentsByUnit(orderedDoc)
+		: new Map<string, Array<{ sourceXml: string; targetXml?: string }>>();
 
 	const d = doc as { xliff: any };
 	const xliff = d.xliff;
@@ -45,10 +53,12 @@ export function parseV20(doc: unknown): ParsedXlf {
 			: [];
 
 		const segments = asArray(unit.segment);
+		const inlineSegments = inlineSegmentsByUnit.get(unitId);
 		// Angular exports usually have one segment, but support many
 		segments.forEach((seg, idx) => {
 			const source = seg?.source ?? "";
 			const target = seg?.target;
+			const inlineSegment = inlineSegments?.[idx];
 
 			const key = segments.length > 1 ? `${unitId}:${idx}` : unitId;
 
@@ -56,8 +66,11 @@ export function parseV20(doc: unknown): ParsedXlf {
 			// but for safety/sync we attach to all derived entries.
 			entries.set(key, {
 				key,
-				sourceXml: toXmlText(source),
-				targetXml: target !== undefined ? toXmlText(target) : undefined,
+				sourceXml: inlineSegment?.sourceXml ?? toXmlText(source),
+				targetXml:
+					target !== undefined
+						? inlineSegment?.targetXml ?? toXmlText(target)
+						: undefined,
 				attributes: Object.keys(attributes).length > 0 ? attributes : undefined,
 				notes: notes.length > 0 ? notes : undefined,
 			});
@@ -71,6 +84,44 @@ export function parseV20(doc: unknown): ParsedXlf {
 		duplicates: duplicates.length > 0 ? duplicates : undefined,
 		raw: doc,
 	};
+}
+
+function collectInlineSegmentsByUnit(
+	orderedDoc: unknown,
+): Map<string, Array<{ sourceXml: string; targetXml?: string }>> {
+	const inlineSegmentsByUnit = new Map<string, Array<{ sourceXml: string; targetXml?: string }>>();
+	const xliff = orderedChildElements(orderedDoc, "xliff")[0];
+	if (!xliff) {
+		return inlineSegmentsByUnit;
+	}
+
+	for (const file of orderedChildElements(orderedElementChildren(xliff, "xliff"), "file")) {
+		for (const unit of orderedChildElements(orderedElementChildren(file, "file"), "unit")) {
+			const unitId = unit[":@"] && typeof unit[":@"] === "object"
+				? (unit[":@"] as Record<string, unknown>)["@_id"]
+				: undefined;
+			if (!unitId) {
+				continue;
+			}
+
+			const segments = orderedChildElements(orderedElementChildren(unit, "unit"), "segment").map((segment) => {
+				const children = orderedElementChildren(segment, "segment");
+				const source = orderedChildElements(children, "source")[0];
+				const target = orderedChildElements(children, "target")[0];
+
+				return {
+					sourceXml: source ? orderedNodesToInnerXml(orderedElementChildren(source, "source")) : "",
+					targetXml: target
+						? orderedNodesToInnerXml(orderedElementChildren(target, "target"))
+						: undefined,
+				};
+			});
+
+			inlineSegmentsByUnit.set(String(unitId), segments);
+		}
+	}
+
+	return inlineSegmentsByUnit;
 }
 
 function toXmlText(v: unknown): string {

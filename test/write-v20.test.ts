@@ -105,4 +105,29 @@ describe("XLIFF 2.0 Serialization", () => {
 		expect(reparsed.entries.get("greeting")?.sourceXml).toBe("Hello");
 		expect(reparsed.entries.get("greeting")?.targetXml).toBe("Bonjour");
 	});
+
+	it("should roundtrip parse and serialize with placeholders", () => {
+		const originalXml = `<?xml version="1.0" encoding="UTF-8" ?>
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="fr">
+  <file id="f1">
+    <unit id="greeting">
+      <segment>
+        <source>Page <ph id="0" equiv="INTERPOLATION" disp="{{ currentPage() }}"/> of <ph id="1" equiv="INTERPOLATION_1" disp="{{ pageCount() }}"/></source>
+        <target>Seite <ph id="0" equiv="INTERPOLATION" disp="{{ currentPage() }}"/> von <ph id="1" equiv="INTERPOLATION_1" disp="{{ pageCount() }}"/></target>
+      </segment>
+    </unit>
+  </file>
+</xliff>`;
+
+		const parsed = parseXlf(originalXml);
+		const serialized = writeV20(parsed.raw, parsed.entries, [], {
+			newTarget: "todo",
+			obsolete: "mark",
+		});
+
+		const reparsed = parseXlf(serialized);
+
+		expect(reparsed.entries.get("greeting")?.sourceXml).toBe('Page <ph id="0" equiv="INTERPOLATION" disp="{{ currentPage() }}"/> of <ph id="1" equiv="INTERPOLATION_1" disp="{{ pageCount() }}"/>');
+		expect(reparsed.entries.get("greeting")?.targetXml).toBe('Seite <ph id="0" equiv="INTERPOLATION" disp="{{ currentPage() }}"/> von <ph id="1" equiv="INTERPOLATION_1" disp="{{ pageCount() }}"/>');
+	});
 });

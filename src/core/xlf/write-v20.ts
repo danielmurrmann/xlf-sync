@@ -1,4 +1,5 @@
 import type { MessageEntry } from "../../types/model.js";
+import { escapeXml, normalizeInlineXmlFragment } from "./inline-xml.js";
 
 export type NewTargetMode = "todo" | "empty" | "source";
 export type ObsoleteMode = "delete" | "mark" | "graveyard";
@@ -92,15 +93,6 @@ export function writeV20(
    XML SERIALIZER (2.0)
    ======================= */
 
-export function escapeXml(s: string) {
-	return s
-		.replaceAll("&", "&amp;")
-		.replaceAll("<", "&lt;")
-		.replaceAll(">", "&gt;")
-		.replaceAll('"', "&quot;")
-		.replaceAll("'", "&apos;");
-}
-
 function toXmlV20(doc: unknown): string {
 	const d = doc as Record<string, unknown>;
 	const xliff = d.xliff as Record<string, unknown>;
@@ -153,15 +145,15 @@ function toXmlV20(doc: unknown): string {
 			}
 
 			const seg = (u.segment ?? {}) as Record<string, unknown>;
-			const source = escapeXml(String(seg.source ?? ""));
+			const source = normalizeInlineXmlFragment(String(seg.source ?? ""));
 
 			let targetXml = "";
 			if (typeof seg.target === "string") {
 				if (seg.target.startsWith("__OBSOLETE__")) {
 					const text = seg.target.replace("__OBSOLETE__", "");
-					targetXml = `<target state="obsolete">${escapeXml(text)}</target>`;
+					targetXml = `<target state="obsolete">${normalizeInlineXmlFragment(text)}</target>`;
 				} else {
-					targetXml = `<target>${escapeXml(seg.target)}</target>`;
+					targetXml = `<target>${normalizeInlineXmlFragment(seg.target)}</target>`;
 				}
 			}
 

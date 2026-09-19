@@ -6,6 +6,7 @@ import type {
 } from "../../types/model.js";
 import { parseV12 } from "./v12.js";
 import { parseV20 } from "./v20.js";
+import { parseOrderedXml } from "./inline-xml.js";
 import { writeV12 } from "./write-v12.js";
 import { writeV20 } from "./write-v20.js";
 
@@ -23,7 +24,7 @@ export function parseXlf(xml: string): ParsedXlf {
 
 	const version = xliff["@_version"];
 	if (version === "1.2") return parseV12(doc);
-	if (version === "2.0") return parseV20(doc);
+	if (version === "2.0") return parseV20(doc, parseOrderedXml(xml));
 
 	throw new Error(`Unsupported XLIFF version: ${version}`);
 }

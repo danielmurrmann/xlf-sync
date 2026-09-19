@@ -1,4 +1,4 @@
-import { escapeXml } from "./write-v20.js";
+import { escapeXml } from "./inline-xml.js";
 import type { MessageEntry, WriteOptions } from "../../types/model.js";
 
 function normalizeText(v: unknown): string {

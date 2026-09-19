@@ -1,5 +1,7 @@
 import { XMLParser } from "fast-xml-parser";
 import { describe, expect, it } from "vitest";
+import { syncLocale } from "../src/core/sync.js";
+import { parseXlf, writeXlf } from "../src/core/xlf/index.js";
 import { parseV12 } from "../src/core/xlf/v12";
 import { parseV20 } from "../src/core/xlf/v20";
 import { writeV12 } from "../src/core/xlf/write-v12";
@@ -100,4 +102,91 @@ describe("Regression Tests (v1.3.5)", () => {
 			expect(output).toContain('<trans-unit id="new"');
 		});
 	});
+
+	describe("XLIFF 2.0 inline placeholders", () => {
+		it("should preserve placeholder markup when syncing a new unit into a locale", () => {
+				const sourceXml = `<?xml version="1.0" encoding="UTF-8" ?>
+	<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="de">
+	  <file id="f1">
+	    <unit id="existing">
+	      <segment>
+	        <source>Existing</source>
+	        <target>Bestehend</target>
+	      </segment>
+	    </unit>
+	    <unit id="greeting">
+	      <segment>
+	        <source>Page <ph id="0" equiv="INTERPOLATION" disp="{{ currentPage() }}"/> of <ph id="1" equiv="INTERPOLATION_1" disp="{{ pageCount() }}"/></source>
+	      </segment>
+	    </unit>
+	  </file>
+	</xliff>`;
+
+				const localeXml = `<?xml version="1.0" encoding="UTF-8" ?>
+	<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="de">
+	  <file id="f1">
+	    <unit id="existing">
+	      <segment>
+	        <source>Existing</source>
+	        <target>Bestehend</target>
+	      </segment>
+	    </unit>
+	  </file>
+	</xliff>`;
+
+				const source = parseXlf(sourceXml);
+				const locale = parseXlf(localeXml);
+				const result = syncLocale(source.entries, locale.entries, {
+					newTarget: "source",
+					obsolete: "mark",
+				});
+
+				const output = writeXlf(locale, result.merged, result.obsoleteKeys, {
+					newTarget: "source",
+					obsolete: "mark",
+				});
+				const reparsed = parseXlf(output);
+
+				expect(reparsed.entries.get("greeting")?.sourceXml).toBe('Page <ph id="0" equiv="INTERPOLATION" disp="{{ currentPage() }}"/> of <ph id="1" equiv="INTERPOLATION_1" disp="{{ pageCount() }}"/>');
+				expect(reparsed.entries.get("greeting")?.targetXml).toBe('Page <ph id="0" equiv="INTERPOLATION" disp="{{ currentPage() }}"/> of <ph id="1" equiv="INTERPOLATION_1" disp="{{ pageCount() }}"/>');
+		});
+
+		it("should preserve a translation unit that contains only a placeholder", () => {
+			const sourceXml = `<?xml version="1.0" encoding="UTF-8" ?>
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="de">
+  <file id="f1">
+    <unit id="only-ph">
+      <segment>
+        <source><ph id="0" equiv="INTERPOLATION" disp="{{ value() }}"/></source>
+      </segment>
+    </unit>
+  </file>
+</xliff>`;
+
+			const localeXml = `<?xml version="1.0" encoding="UTF-8" ?>
+<xliff version="2.0" xmlns="urn:oasis:names:tc:xliff:document:2.0" srcLang="en" trgLang="de">
+  <file id="f1"></file>
+</xliff>`;
+
+			const source = parseXlf(sourceXml);
+			const locale = parseXlf(localeXml);
+			const result = syncLocale(source.entries, locale.entries, {
+				newTarget: "source",
+				obsolete: "mark",
+			});
+
+			const output = writeXlf(locale, result.merged, result.obsoleteKeys, {
+				newTarget: "source",
+				obsolete: "mark",
+			});
+			const reparsed = parseXlf(output);
+
+			expect(reparsed.entries.get("only-ph")?.sourceXml).toBe(
+				'<ph id="0" equiv="INTERPOLATION" disp="{{ value() }}"/>',
+			);
+			expect(reparsed.entries.get("only-ph")?.targetXml).toBe(
+				'<ph id="0" equiv="INTERPOLATION" disp="{{ value() }}"/>',
+			);
+		});
+		});
 });
